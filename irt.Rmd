@@ -1,0 +1,219 @@
+---
+title: Simulating and Fitting One Parameter IRT Model
+date: "Dec 13, 2022"
+output:
+  html_document:
+    theme: readable
+    highlight: tango
+    toc: true
+    toc_float: 
+      collapsed: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	message = FALSE,
+	warning = FALSE,
+	attr.source = '.numberLines',
+	results = 'hold',
+	out.width = "40%",
+	comment = "",
+	fig.dim = c(7, 7)
+)
+```
+
+
+## Simulating Data
+
+```{r}
+set.seed(10)
+library(tidyr)
+library(dplyr)
+
+# Helper functions
+logistic = function(x) { 1 / (1 + exp(-x)) }
+rbernoulli = function(prob) 
+  rbinom(n = length(prob), size = 1, prob = prob)
+
+# The logistic function maps real numbers to Probabilities
+logistic(-2:2)
+x = seq(from = -6, to = 6, by = 0.1)
+plot(x, logistic(x))
+```
+
+```{r}
+# rbernoulli() is a wrapper around the more general binomial random number 
+# genrator to create 1 & 0s according to a probability
+rbernoulli(c(0, 0.5, 0.5, 1))
+rbernoulli(rep(0.75, 10000)) |> mean()  # Replicate 10000 times
+```
+
+
+```{r }
+n_item = 20
+n_subj = 100
+n_resp = n_subj * n_item
+```
+
+```{r}
+# Simulated data
+theta = rnorm(n = n_subj, mean = 0, sd = 1)  # Subjects' ability
+delta = rnorm(n = n_item, mean = 0, sd = 1)  # Items' difficulty
+
+d = tibble::tibble(
+  subj = rep(1:n_subj, each = n_item), # 1, 1, 1, ..., 1,  2, 2, 2, ..., 2, 
+  item = rep(1:n_item, n_subj),        # 1, 2, 3, ..., 10, 1, 2, 3, ..., 10,
+  theta = theta[subj],
+  delta = delta[item],
+  endorse = rbernoulli(prob = logistic(theta - delta))
+)
+glimpse(d)
+```
+
+See notes for another way to create crossed observations with `expand.grid()`[^1].
+
+```{r}
+# Wider format to pass to `ltm::rasch()`
+d_wide = d %>% 
+  dplyr::select(subj, item, endorse) %>%
+  pivot_wider(names_from = item, values_from = endorse)
+head(d_wide)
+```
+
+
+[^1]:   
+
+    ```{r}
+    d2 = expand.grid(seq_along(theta), seq_along(delta))
+    colnames(d2) = c("subj", "item")
+    d2$theta = theta[d2$subj]
+    d2$delta = delta[d2$item]
+    d2$endorse = rbernoulli(prob = logistic(d2$theta - d2$delta))
+    glimpse(d)
+    ```
+
+
+
+
+## Model fitting on simulated data
+
+### Model 1: Rasch Model
+
+```{r }
+library(ltm)
+irt_rasch = rasch(d_wide[, 2:ncol(d_wide)], IRT.param = T)
+
+# Model parameter estimates
+est_difficulty = summary(irt_rasch)$coefficients[1:n_item, 1]
+score.dat = factor.scores(irt_rasch)$score.dat
+resp_score = score.dat$z1
+resp_pat = sapply(seq_along(resp_score), 
+                  function(i) paste(score.dat[i, 1:n_item], collapse=""))
+get_subj_ability = function(subj_id) {
+  resp = paste(d_wide[subj_id, 2:ncol(d_wide)], collapse = "")
+  resp_score[resp_pat == resp]
+}
+est_ability = sapply(1:n_subj, function(id) get_subj_ability(id))
+```
+
+```{r}
+# Compare estimated with true parameter (item difficulty)
+plot(est_difficulty , delta)
+abline(a=0, b=1)
+text(x = 0.5, y = -0.5, 
+     paste("r = ", cor(est_difficulty , delta) |> round(3)))
+```
+
+
+```{r}
+# Compare estimated with true parameter (subject ability)
+plot(est_ability, theta)
+abline(a=0, b=1)
+text(x = 1.5, y = -0.5, 
+     paste("r = ", cor(est_ability, theta) |> round(3)))
+```
+
+
+
+
+
+### Model 2: GLMM
+
+with subject ability as **random** effects and item difficulty as **fixed** effects
+
+```{r }
+library(lme4)
+
+d$subj = factor(d$subj)
+d$item = factor(d$item)
+
+# -1 removes intercept in fixed effect
+glmm = glmer(endorse ~ -1 + item + (1|subj), data = d, 
+             family = binomial(link='logit'))
+
+(m_summ = summary(glmm, cor=F))
+fixed_eff = m_summ$coefficients[, 1]
+rnd_eff = ranef(glmm)$subj[, 1]
+```
+
+```{r}
+# Compare estimated with true parameter (item difficulty)
+plot(-fixed_eff , delta)
+abline(a=0, b=1)
+text(x = 0.5, y = -0.5, 
+     paste("r = ", cor(-fixed_eff , delta) |> round(3)))
+```
+
+
+```{r}
+# Compare estimated with true parameter (subject ability)
+plot(rnd_eff, theta)
+abline(a=0, b=1)
+text(x = 1.5, y = -0.5, 
+     paste("r = ", cor(rnd_eff, theta) |> round(3)))
+```
+
+
+
+
+## Model Comparison
+
+### Model Estimates
+
+```{r }
+plot(est_difficulty, -fixed_eff)
+abline(a=0, b=1)
+text(x = 1, y = -1,
+     paste("r =",   cor(est_difficulty, -fixed_eff), "\n",
+           "SSE =", sum((est_difficulty - (-fixed_eff))^2)
+           )
+     )
+```
+
+```{r}
+
+plot(est_ability, rnd_eff)
+abline(a=0, b=1)
+text(x = 1, y = -1,
+     paste("r =", cor(est_difficulty, -fixed_eff), "\n",
+           "SSE =", sum((est_ability - rnd_eff)^2)
+           )
+     )
+```
+
+
+
+### Distance to True Parameter Values
+
+```{r }
+# Mean Squared Error for Item difficulties Estimates
+mean((est_difficulty - delta)^2)  # IRT Rasch
+mean((-fixed_eff - delta)^2)      # GLMM
+```
+
+```{r}
+# Mean Squared Error for Subject Abilities Estimates
+mean((est_ability - theta)^2)  # IRT Rasch
+mean((rnd_eff - theta)^2)      # GLMM
+```
+

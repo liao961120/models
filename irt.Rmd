@@ -16,9 +16,9 @@ knitr::opts_chunk$set(
 	warning = FALSE,
 	attr.source = '.numberLines',
 	results = 'hold',
-	out.width = "40%",
+	out.width = "50%",
 	comment = "",
-	fig.dim = c(7, 7)
+	fig.dim = c(8, 8)
 )
 ```
 
@@ -216,4 +216,104 @@ mean((-fixed_eff - delta)^2)      # GLMM
 mean((est_ability - theta)^2)  # IRT Rasch
 mean((rnd_eff - theta)^2)      # GLMM
 ```
+
+
+## Estimater Robustness
+
+IRT assumes a normal distribution of subject ability.
+
+```{r}
+dgm = function(theta, delta) {
+  d = tibble::tibble(
+    subj = rep(1:n_subj, each = n_item), # 1, 1, 1, ..., 1,  2, 2, 2, ..., 2, 
+    item = rep(1:n_item, n_subj),        # 1, 2, 3, ..., 10, 1, 2, 3, ..., 10,
+    theta = theta[subj],
+    delta = delta[item],
+    endorse = rbernoulli(prob = logistic(theta - delta))
+  )
+  d_wide = d %>% 
+    dplyr::select(subj, item, endorse) %>%
+    pivot_wider(names_from = item, values_from = endorse)
+  return(d_wide)
+}
+```
+
+
+```{r}
+fit_irt = function(d_wide) {
+  irt_rasch = rasch(d_wide[, 2:ncol(d_wide)], IRT.param = T)
+  # Model parameter estimates
+  est_difficulty = summary(irt_rasch)$coefficients[1:n_item, 1]
+  score.dat = factor.scores(irt_rasch)$score.dat
+  resp_score = score.dat$z1
+  resp_pat = sapply(seq_along(resp_score), 
+                    function(i) paste(score.dat[i, 1:n_item], collapse=""))
+  get_subj_ability = function(subj_id) {
+    resp = paste(d_wide[subj_id, 2:ncol(d_wide)], collapse = "")
+    resp_score[resp_pat == resp]
+  }
+  est_ability = sapply(1:n_subj, function(id) get_subj_ability(id))
+  return(list(
+    theta = est_ability,
+    delta = est_difficulty
+  ))
+}
+```
+
+### Test Convergence: replicate 100 times with same parameters
+
+```{r}
+theta = rnorm(n = n_subj, mean = 0, sd = 1)  # Subjects' ability
+delta = rnorm(n = n_item, mean = 0, sd = 1)  # Items' difficulty
+```
+
+```{r}
+replicate = 100
+
+est_theta = vector("list", replicate)  # Subjects' ability
+est_delta = vector("list", replicate)  # Items' difficulty
+for (i in 1:replicate) {
+  d_wide = dgm(theta, delta)
+  est = fit_irt(d_wide)
+  est_theta[[i]] = est$theta
+  est_delta[[i]] = est$delta
+}
+```
+
+
+```{r}
+est_theta_mat = sapply(est_theta, function(x) x) |> t()
+est_delta_mat = sapply(est_delta, function(x) x) |> t()
+```
+
+#### Estimation of Subject Ability
+
+```{r}
+d_est_theta = t(est_theta_mat) %>%
+  as.data.frame() %>%
+  mutate(subj = 1:n_subj) %>%
+  pivot_longer(cols = starts_with("V"), values_to = "theta", 
+               names_to = "replicate")
+
+est_theta_mean = apply(est_theta_mat, MARGIN = 2, function(col) mean(col))
+plot(theta[d_est_theta$subj], d_est_theta$theta)
+points(theta, est_theta_mean, col="red", pch=19)
+abline(0, 1, col="red")
+```
+
+#### Estimation of Item Difficulty
+
+```{r}
+d_est_delta = t(est_delta_mat) %>%
+  as.data.frame() %>%
+  mutate(item = 1:n_item) %>%
+  pivot_longer(cols = starts_with("V"), values_to = "delta", 
+               names_to = "replicate")
+
+est_delta_mean = apply(est_delta_mat, MARGIN = 2, function(col) mean(col))
+plot(delta[d_est_delta$item], d_est_delta$delta)
+points(delta, est_delta_mean, col="red", pch=19)
+abline(0, 1, col="red")
+```
+
 

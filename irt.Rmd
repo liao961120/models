@@ -1,6 +1,7 @@
 ---
 title: Simulating and Fitting One Parameter IRT Model
-date: "Dec 13, 2022"
+date: |
+  | `r Sys.setlocale(locale="en_US.UTF-8"); format(Sys.Date(), "%b %d, %Y")`
 output:
   html_document:
     theme: readable
@@ -218,6 +219,19 @@ mean((rnd_eff - theta)^2)      # GLMM
 ```
 
 
+## Relationship b/w Raw Test Score and Ability
+
+
+```{r}
+raw_scores = apply(d_wide[, -1], MARGIN = 1, 
+                   function(row) sum(row))
+
+m = lm(raw_scores ~ est_ability)
+plot(est_ability, raw_scores)
+abline(m$coefficients)
+```
+
+
 ## Estimater Robustness
 
 IRT assumes a normal distribution of subject ability.
@@ -315,5 +329,6 @@ plot(delta[d_est_delta$item], d_est_delta$delta)
 points(delta, est_delta_mean, col="red", pch=19)
 abline(0, 1, col="red")
 ```
+
 
 

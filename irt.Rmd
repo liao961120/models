@@ -243,6 +243,8 @@ plot(latent_scores, est_raw_scores, type = "l", lty = 1, col="red")
 abline(m$coefficients)
 ```
 
+
+
 ### Empirical Data
 
 ```{r}

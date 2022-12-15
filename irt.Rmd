@@ -222,6 +222,29 @@ mean((rnd_eff - theta)^2)      # GLMM
 ## Relationship b/w Raw Test Score and Ability
 
 
+### Estimated raw scores
+
+$$X = \sum\limits_{item} P(\theta) + \epsilon$$
+
+```{r}
+latent2raw = function(ability) {
+  raw_scores = sapply(ability, function(theta) {
+    probs = logistic(theta - est_difficulty)
+    sum(probs)
+  })
+  return(raw_scores)
+}
+
+latent_scores = seq(from=-3, to=3, by=0.01)
+est_raw_scores = latent2raw(latent_scores)
+
+m = lm(est_raw_scores ~ latent_scores)
+plot(latent_scores, est_raw_scores, type = "l", lty = 1, col="red")
+abline(m$coefficients)
+```
+
+### Empirical Data
+
 ```{r}
 raw_scores = apply(d_wide[, -1], MARGIN = 1, 
                    function(row) sum(row))

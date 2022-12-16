@@ -1,5 +1,5 @@
 ---
-title: Simulating and Fitting One Parameter IRT Model
+title: Simulating and Fitting IRT 1PL Model
 date: |
   | `r Sys.setlocale(locale="en_US.UTF-8"); format(Sys.Date(), "%b %d, %Y")`
 output:

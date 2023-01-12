@@ -1,14 +1,19 @@
 ---
 title: Simulating and Fitting IRT 1PL Model
+author: Yongfu Liao
 date: |
   | `r Sys.setlocale(locale="en_US.UTF-8"); format(Sys.Date(), "%b %d, %Y")`
-output:
-  html_document:
-    theme: readable
-    highlight: tango
+link-external-icon: true
+link-external-newwindow: true
+format: 
+  html:
     toc: true
-    toc_float: 
-      collapsed: false
+    # toc-title: 目錄
+    # toc-depth: 6
+    html-math-method: katex
+    embed-resources: false
+    df-print: default  # default/kable/tibble/paged
+theme: sandstone # cosmos/darkly/simplex/sandstone/pandoc/none
 ---
 
 ```{r setup, include=FALSE}
